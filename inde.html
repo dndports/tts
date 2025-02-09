@@ -114,7 +114,7 @@
 
     // Fetch the TTS audio from the StreamElements API
     async function fetchTTS(text) {
-      const url = `https://api.streamelements.com/kappa/v2/speech?voice=Emma&text=${encodeURIComponent(text)}`;
+      const url = `https://api.streamelements.com/kappa/v2/speech?voice=Brian&text=${encodeURIComponent(text)}`;
       try {
         const response = await fetch(url);
         if (response.ok) {
