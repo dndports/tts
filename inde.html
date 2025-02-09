@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Chat with TTS</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .message {
+      margin: 10px 0;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+    }
+    .username {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Chat Log</h1>
+  <div id="chat-log"></div>
+
+  <script>
+    const ws = new WebSocket('wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false');
+    const ttsQueue = [];  // Queue to manage multiple TTS requests
+    let isPlaying = false;  // Flag to indicate if audio is currently playing
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+
+      // Send the subscription message
+      const subscriptionMessage = {
+        event: "pusher:subscribe",
+        data: {
+          auth: "",
+          channel: "chatrooms.53405802.v2"
+        }
+      };
+
+      ws.send(JSON.stringify(subscriptionMessage));
+    };
+
+    ws.onmessage = async (event) => {
+      console.log('Message received:', event.data);
+
+      try {
+        const messageData = JSON.parse(event.data);
+
+        if (messageData.event === "App\\Events\\ChatMessageEvent") {
+          const chatData = JSON.parse(messageData.data);
+          const username = chatData.sender.username;
+          const message = chatData.content;
+
+          // Create a new message element and append it to the chat log
+          const chatLog = document.getElementById('chat-log');
+          const messageElement = document.createElement('div');
+          messageElement.classList.add('message');
+          messageElement.innerHTML = `<span class="username">${username}</span>: <p>${message}</p>`;
+          chatLog.appendChild(messageElement);
+          chatLog.scrollTop = chatLog.scrollHeight;  // Scroll to the bottom of the chat log
+
+          // If the message starts with "!tts", convert it to speech and queue it
+          if (message.startsWith('!tts')) {
+            const textToSpeak = message.replace('!tts', '').trim();
+            addToQueue(textToSpeak);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket closed');
+    };
+
+    // Add text to the TTS queue
+    function addToQueue(text) {
+      ttsQueue.push(text);
+      if (!isPlaying) {
+        playNextInQueue();
+      }
+    }
+
+    // Play the next TTS item in the queue
+    async function playNextInQueue() {
+      if (ttsQueue.length === 0) {
+        isPlaying = false;
+        return;
+      }
+
+      isPlaying = true;
+      const text = ttsQueue.shift();  // Get the next text from the queue
+      const audioUrl = await fetchTTS(text);
+
+      if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        audio.play();
+
+        audio.onended = () => {
+          playNextInQueue();  // Play the next item in the queue when current audio finishes
+        };
+      } else {
+        console.error('Failed to fetch TTS audio');
+        playNextInQueue();  // Skip to the next item if there's an error
+      }
+    }
+
+    // Fetch the TTS audio from the StreamElements API
+    async function fetchTTS(text) {
+      const url = `https://api.streamelements.com/kappa/v2/speech?voice=Emma&text=${encodeURIComponent(text)}`;
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          return response.url;  // Return the URL of the TTS audio file
+        } else {
+          console.error('Error fetching TTS:', response.statusText);
+          return null;
+        }
+      } catch (error) {
+        console.error('Error fetching TTS:', error);
+        return null;
+      }
+    }
+  </script>
+
+</body>
+</html>
